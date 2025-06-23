@@ -10,7 +10,7 @@ from utils.clustering import (
 )
 
 def show_data_processing_page():
-    """Enhanced Data Processing Page dengan validation."""
+    """Enhanced Data Processing Page."""
     
     # Page header
     st.markdown("""
@@ -20,23 +20,21 @@ def show_data_processing_page():
     </div>
     """, unsafe_allow_html=True)
     
-    # File upload with modern styling
+    # File upload
     st.markdown("### 📁 Data Upload")
     
-    # Show upload interface
     uploaded_file = st.file_uploader(
         "Choose your crime dataset (CSV format)",
         type=['csv'],
-        help="Upload a CSV file containing crime data (will replace current data if any)"
+        help="Upload a CSV file containing crime data"
     )
     
-    # Handle new file upload
+    # Handle file upload
     if uploaded_file is not None:
         try:
-            # Load and display data
             df = pd.read_csv(uploaded_file)
             
-            # Data overview with cards
+            # Data overview
             st.markdown("### 📈 Dataset Overview")
             col1, col2, col3, col4 = st.columns(4)
             
@@ -80,19 +78,17 @@ def show_data_processing_page():
             st.markdown("### 🚀 Data Processing & Feature Engineering")
             
             if st.button("🔄 Process Data", type="primary", use_container_width=True):
-                # Process data (sesuai notebook)
                 processed_df, processing_stats = process_data(df.copy())
                 
-                # Store processed data in session state
+                # Store processed data
                 st.session_state.processed_df = processed_df
                 st.session_state.processing_stats = processing_stats
-                st.session_state.original_df = df.copy()  # Store original for reference
+                st.session_state.original_df = df.copy()
                 
-                # Clear previous analysis results when new data is processed
+                # Clear previous analysis results
                 clear_analysis_session_state()
                 
                 st.success("✅ Data processing completed!")
-                # FIX: Langsung tampilkan interface tanpa rerun
         
         except Exception as e:
             st.error(f"❌ Error processing file: {str(e)}")
@@ -101,31 +97,6 @@ def show_data_processing_page():
     # Show current status if data is processed
     if st.session_state.get('processed_df') is not None:
         display_processed_data_info()
-        
-        # VALIDATION SECTION
-        if st.checkbox("🔍 Show Validation & Debug Information"):
-            from utils.notebook_validator import (
-                validate_preprocessing_steps, 
-                compare_with_expected_notebook_output,
-                debug_data_differences
-            )
-            
-            # Validate preprocessing
-            validation_results = validate_preprocessing_steps(st.session_state.processed_df)
-            
-            # Compare dengan original data
-            if st.session_state.get('original_df') is not None:
-                debug_data_differences(
-                    st.session_state.original_df, 
-                    st.session_state.processed_df
-                )
-            
-            # Show detailed encoder info
-            if st.session_state.get('location_encoder'):
-                st.write("**Encoder Details:**")
-                encoder = st.session_state.location_encoder
-                st.write(f"Encoder classes: {len(encoder.classes_)}")
-                st.write(f"Sample classes: {list(encoder.classes_[:10])}")
         
         # HDBSCAN Tuning Section
         show_hdbscan_tuning_interface()
@@ -238,7 +209,7 @@ def show_hdbscan_tuning_interface():
         show_analysis_results()
 
 def show_tuning_results():
-    """Display tuning results dengan validation."""
+    """Display tuning results tanpa validation."""
     st.markdown("#### 📊 HDBSCAN Tuning Results")
     tuning_df = st.session_state.tuning_results
     
@@ -249,10 +220,9 @@ def show_tuning_results():
     
     st.dataframe(display_df, use_container_width=True, hide_index=True)
     
-    # Add row selection for visualization
+    # Row selection for visualization
     st.markdown("**📋 Click on a row to select parameters for final clustering:**")
     
-    # Display interactive table
     selected_indices = st.dataframe(
         display_df,
         use_container_width=True,
@@ -261,16 +231,14 @@ def show_tuning_results():
         selection_mode="single-row"
     )
     
-    # Store selected row for visualization
+    # Store selected row
     if len(selected_indices.selection.rows) > 0:
         selected_idx = selected_indices.selection.rows[0]
         selected_row = display_df.iloc[selected_idx]
         
-        # Convert to integers explicitly
         st.session_state.viz_min_cluster_size = int(selected_row['min_cluster_size'])
         st.session_state.viz_min_samples = int(selected_row['min_samples'])
         
-        # Show selected configuration
         st.success(f"""
         ✅ **Selected Configuration:**  
         • Min Cluster Size: {int(selected_row['min_cluster_size'])}  
@@ -345,7 +313,7 @@ def clear_analysis_session_state():
             del st.session_state[key]
 
 def run_hdbscan_tuning_custom(df, min_cluster_sizes, min_samples_list):
-    """Run HDBSCAN tuning EXACT seperti notebook cell ke-10."""
+    """Run HDBSCAN tuning tanpa validation."""
     
     with st.spinner("🔍 Running HDBSCAN parameter tuning..."):
         import numpy as np
@@ -354,7 +322,7 @@ def run_hdbscan_tuning_custom(df, min_cluster_sizes, min_samples_list):
         from sklearn.preprocessing import StandardScaler
         
         try:
-            import umap.umap_ as umap  # EXACT import seperti notebook
+            import umap.umap_ as umap
             warnings.filterwarnings('ignore')
         except ImportError:
             try:
@@ -364,21 +332,20 @@ def run_hdbscan_tuning_custom(df, min_cluster_sizes, min_samples_list):
                 st.error("❌ UMAP not installed")
                 return None
         
-        # EXACT features seperti notebook cell ke-9
+        # Features selection
         required_features = ['primary_type_encoded', 'weekday', 'hour', 'crime_scene',
                            'location_category_encoded', 'latitude', 'longitude']
         
-        # Validasi features
+        # Validate features
         available_features = [col for col in required_features if col in df.columns]
         if len(available_features) < 7:
             st.error(f"Missing features: {set(required_features) - set(available_features)}")
             return None
         
-        # EXACT seperti notebook: fitur = df[required_features].copy()
         fitur = df[required_features].copy()
         st.write(f"📊 **Data for clustering**: {len(fitur):,} records")
         
-        # Debug: Check for any non-numeric values or NaN
+        # Feature validation
         st.write("📊 **Feature validation**:")
         for col in required_features:
             if col in fitur.columns:
@@ -387,23 +354,21 @@ def run_hdbscan_tuning_custom(df, min_cluster_sizes, min_samples_list):
                 unique_vals = fitur[col].nunique()
                 st.write(f"  {col}: dtype={dtype}, unique={unique_vals}, NaN={nan_count}")
                 
-                # Fix any non-numeric issues
                 if fitur[col].dtype == 'object':
-                    # Try to convert to numeric
                     fitur[col] = pd.to_numeric(fitur[col], errors='coerce')
                     st.warning(f"  Converted {col} to numeric")
         
-        # Handle any remaining NaN values
+        # Handle NaN values
         if fitur.isnull().sum().sum() > 0:
             st.warning("Found NaN values, filling with median")
             fitur = fitur.fillna(fitur.median())
         
-        # EXACT StandardScaler seperti notebook
+        # Standard scaling
         scaler = StandardScaler()
         scaled_fitur = scaler.fit_transform(fitur)
         st.write(f"📊 **Scaled features shape**: {scaled_fitur.shape}")
         
-        # EXACT UMAP parameters seperti notebook cell ke-10
+        # UMAP dimensionality reduction
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
@@ -411,8 +376,8 @@ def run_hdbscan_tuning_custom(df, min_cluster_sizes, min_samples_list):
                     n_neighbors=30, 
                     min_dist=0.1, 
                     n_components=2, 
-                    random_state=42,  # CRITICAL: Same as notebook
-                    n_jobs=1  # Ensure reproducibility
+                    random_state=42,
+                    n_jobs=1
                 )
                 embedding = reducer.fit_transform(scaled_fitur)
                 st.write(f"📊 **UMAP embedding shape**: {embedding.shape}")
@@ -420,7 +385,7 @@ def run_hdbscan_tuning_custom(df, min_cluster_sizes, min_samples_list):
             st.error(f"❌ UMAP error: {str(e)}")
             return None
         
-        # EXACT tuning loop seperti notebook
+        # HDBSCAN tuning loop
         tuning_results = []
         total_combinations = len(min_cluster_sizes) * len(min_samples_list)
         
@@ -428,32 +393,28 @@ def run_hdbscan_tuning_custom(df, min_cluster_sizes, min_samples_list):
         status_text = st.empty()
         current_step = 0
         
-        st.write("🔍 **HDBSCAN Tuning Results (exact format from notebook):**")
+        st.write("🔍 **HDBSCAN Tuning Results:**")
         results_placeholder = st.empty()
         
-        # EXACT nested loop seperti notebook cell ke-10
         for min_size in min_cluster_sizes:
             for min_samples in min_samples_list:
                 current_step += 1
                 status_text.text(f"Testing: min_size={min_size}, min_samples={min_samples} ({current_step}/{total_combinations})")
                 
                 try:
-                    # EXACT HDBSCAN parameters seperti notebook
                     clusterer = hdbscan.HDBSCAN(
-                        min_cluster_size=int(min_size),      # Convert to int
-                        min_samples=int(min_samples),        # Convert to int
-                        metric='euclidean',                  # EXACT seperti notebook
-                        prediction_data=True,                # EXACT seperti notebook
-                        cluster_selection_epsilon=0.0       # Ensure default
+                        min_cluster_size=int(min_size),
+                        min_samples=int(min_samples),
+                        metric='euclidean',
+                        prediction_data=True,
+                        cluster_selection_epsilon=0.0
                     )
                     labels = clusterer.fit_predict(embedding)
                     
-                    # EXACT calculation seperti notebook
                     n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
                     noise = np.sum(labels == -1)
                     noise_percentage = (noise / len(labels)) * 100
                     
-                    # EXACT output format seperti notebook
                     result_text = f"min_size: {int(min_size)}, min_samples: {int(min_samples)}, Clusters: {n_clusters}, Noise: {noise}"
                     
                     tuning_results.append({
@@ -465,7 +426,7 @@ def run_hdbscan_tuning_custom(df, min_cluster_sizes, min_samples_list):
                         'result_text': result_text
                     })
                     
-                    # Update display real-time
+                    # Update display
                     results_text = "\n".join([r['result_text'] for r in tuning_results])
                     results_placeholder.text(results_text)
                     
@@ -480,152 +441,7 @@ def run_hdbscan_tuning_custom(df, min_cluster_sizes, min_samples_list):
         # Convert to DataFrame
         tuning_df = pd.DataFrame(tuning_results)
         
-        # Store untuk later use - EXACT seperti notebook
-        st.session_state.embedding = embedding
-        st.session_state.scaler = scaler
-        st.session_state.features_for_clustering = fitur
-        st.session_state.reducer = reducer
-        st.session_state.scaled_fitur = scaled_fitur  # Store untuk clustering final
-        
-        st.success(f"✅ Tuning completed! Tested {len(tuning_results)} combinations.")
-        
-
-def run_hdbscan_tuning_exact_notebook(df, min_cluster_sizes, min_samples_list):
-    """Run HDBSCAN tuning EXACT seperti notebook dengan hasil yang sama."""
-    
-    with st.spinner("🔍 Running HDBSCAN parameter tuning (matching notebook)..."):
-        import numpy as np
-        import hdbscan
-        import warnings
-        from sklearn.preprocessing import StandardScaler
-        
-        try:
-            import umap.umap_ as umap  # EXACT import seperti notebook
-            warnings.filterwarnings('ignore')
-        except ImportError:
-            st.error("❌ UMAP not installed")
-            return None
-        
-        # EXACT features selection seperti notebook
-        required_features = ['primary_type_encoded', 'weekday', 'hour', 'crime_scene',
-                           'location_category_encoded', 'latitude', 'longitude']
-        
-        # Validasi dan filter data
-        available_features = [col for col in required_features if col in df.columns]
-        if len(available_features) < 7:
-            st.error(f"Missing features: {set(required_features) - set(available_features)}")
-            return None
-        
-        # EXACT feature preparation seperti notebook
-        fitur = df[required_features].copy()
-        
-        # Debug info
-        st.write(f"📊 **Data shape**: {fitur.shape}")
-        st.write(f"📊 **Features**: {required_features}")
-        
-        # Handle missing values sama seperti notebook
-        if fitur.isnull().sum().sum() > 0:
-            st.warning("Found NaN values, dropping rows...")
-            fitur = fitur.dropna()
-        
-        # EXACT StandardScaler seperti notebook
-        scaler = StandardScaler()
-        scaled_fitur = scaler.fit_transform(fitur)
-        st.write(f"📊 **Scaled features shape**: {scaled_fitur.shape}")
-        
-        # EXACT UMAP dengan parameter yang sama persis
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                # CRITICAL: EXACT parameters seperti notebook
-                reducer = umap.UMAP(
-                    n_neighbors=30, 
-                    min_dist=0.1, 
-                    n_components=2, 
-                    random_state=42,  # CRITICAL: Must be exactly 42
-                    metric='euclidean'  # Add explicit metric
-                )
-                embedding = reducer.fit_transform(scaled_fitur)
-                st.write(f"📊 **UMAP embedding shape**: {embedding.shape}")
-        except Exception as e:
-            st.error(f"❌ UMAP error: {str(e)}")
-            return None
-        
-        # EXACT tuning loop seperti notebook
-        tuning_results = []
-        
-        # Progress tracking
-        total_combinations = len(min_cluster_sizes) * len(min_samples_list)
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        current_step = 0
-        
-        st.write("🔍 **HDBSCAN Tuning Results (matching notebook format):**")
-        results_placeholder = st.empty()
-        
-        # Store expected results dari notebook untuk validation
-        expected_notebook_results = {
-            (300, 5): 24, (300, 10): 22, (300, 20): 23, (300, 50): 17,
-            (500, 5): 39, (500, 10): 28, (500, 20): 26, (500, 50): 20,
-            (1000, 5): 25, (1000, 10): 24, (1000, 20): 19, (1000, 50): 20,
-            (2000, 5): 19, (2000, 10): 18, (2000, 20): 16, (2000, 50): 17
-        }
-        
-        # EXACT nested loop seperti notebook
-        for min_size in min_cluster_sizes:
-            for min_samples in min_samples_list:
-                current_step += 1
-                status_text.text(f"Testing: min_size={min_size}, min_samples={min_samples} ({current_step}/{total_combinations})")
-                
-                try:
-                    # EXACT HDBSCAN parameters seperti notebook
-                    clusterer = hdbscan.HDBSCAN(
-                        min_cluster_size=int(min_size),
-                        min_samples=int(min_samples),
-                        metric='euclidean',
-                        prediction_data=True
-                    )
-                    labels = clusterer.fit_predict(embedding)
-                    
-                    # EXACT calculation seperti notebook
-                    n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
-                    noise = np.sum(labels == -1)
-                    noise_percentage = (noise / len(labels)) * 100
-                    
-                    # EXACT output format seperti notebook
-                    result_text = f"min_size: {min_size}, min_samples: {min_samples}, Clusters: {n_clusters}, Noise: {noise}"
-                    
-                    # Validation dengan expected results
-                    expected_clusters = expected_notebook_results.get((min_size, min_samples))
-                    if expected_clusters:
-                        match_status = "✅" if n_clusters == expected_clusters else "❌"
-                        result_text += f" {match_status}"
-                    
-                    tuning_results.append({
-                        'min_cluster_size': int(min_size),
-                        'min_samples': int(min_samples),
-                        'n_clusters': n_clusters,
-                        'n_noise': noise,
-                        'noise_percentage': noise_percentage,
-                        'result_text': result_text
-                    })
-                    
-                    # Update display real-time
-                    results_text = "\n".join([r['result_text'] for r in tuning_results])
-                    results_placeholder.text(results_text)
-                    
-                except Exception as e:
-                    st.warning(f"Error with min_size={min_size}, min_samples={min_samples}: {str(e)}")
-                
-                progress_bar.progress(current_step / total_combinations)
-        
-        progress_bar.empty()
-        status_text.empty()
-        
-        # Convert to DataFrame
-        tuning_df = pd.DataFrame(tuning_results)
-        
-        # Store untuk later use
+        # Store for later use
         st.session_state.embedding = embedding
         st.session_state.scaler = scaler
         st.session_state.features_for_clustering = fitur
@@ -633,26 +449,6 @@ def run_hdbscan_tuning_exact_notebook(df, min_cluster_sizes, min_samples_list):
         st.session_state.scaled_fitur = scaled_fitur
         
         st.success(f"✅ Tuning completed! Tested {len(tuning_results)} combinations.")
-        
-        # Validation summary
-        matches = 0
-        total_checks = 0
-        for _, row in tuning_df.iterrows():
-            expected = expected_notebook_results.get((row['min_cluster_size'], row['min_samples']))
-            if expected:
-                total_checks += 1
-                if row['n_clusters'] == expected:
-                    matches += 1
-        
-        accuracy = (matches / total_checks * 100) if total_checks > 0 else 0
-        st.write(f"📊 **Notebook Match Accuracy: {accuracy:.1f}% ({matches}/{total_checks})**")
-        
-        if accuracy >= 90:
-            st.success("🎉 **EXCELLENT MATCH** dengan notebook!")
-        elif accuracy >= 70:
-            st.success("🎯 **GOOD MATCH** dengan notebook!")
-        else:
-            st.warning("⚠️ Masih ada perbedaan dengan notebook. Periksa preprocessing.")
         
         return tuning_df
 

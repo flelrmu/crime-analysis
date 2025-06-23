@@ -487,22 +487,3 @@ def show_visualization_page():
                     st.plotly_chart(fig_geo, use_container_width=True)
         else:
             st.warning("⚠️ Geographic data not available for mapping")
-    
- 
-        st.markdown("### 📈 Clustering Evaluation")
-        
-        # Evaluation metrics
-        if embedding is not None and labels is not None:
-            with st.spinner("Calculating evaluation metrics..."):
-                eval_metrics = create_clustering_evaluation_metrics(df, embedding, labels)
-                if eval_metrics is not None:
-                    st.dataframe(eval_metrics, use_container_width=True)
-            
-            # Silhouette analysis
-            st.markdown("### 📊 Silhouette Analysis")
-            with st.spinner("Creating silhouette analysis..."):
-                fig_silhouette = create_silhouette_analysis_chart(embedding, labels)
-                if fig_silhouette:
-                    st.plotly_chart(fig_silhouette, use_container_width=True)
-        else:
-            st.warning("⚠️ Clustering results not available for evaluation")
