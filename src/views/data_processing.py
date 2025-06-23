@@ -8,6 +8,9 @@ from utils.clustering import (
     create_cluster_distribution_chart,
     create_time_cluster_analysis
 )
+import warnings
+warnings.filterwarnings('ignore', category=SyntaxWarning)
+warnings.filterwarnings('ignore', category=FutureWarning)
 
 def show_data_processing_page():
     """Enhanced Data Processing Page."""
@@ -313,87 +316,109 @@ def clear_analysis_session_state():
             del st.session_state[key]
 
 def run_hdbscan_tuning_custom(df, min_cluster_sizes, min_samples_list):
-    """Run HDBSCAN tuning tanpa validation."""
+    """Run HDBSCAN tuning with improved error handling for deployment."""
     
     with st.spinner("🔍 Running HDBSCAN parameter tuning..."):
         import numpy as np
-        import hdbscan
         import warnings
         from sklearn.preprocessing import StandardScaler
         
-        try:
-            import umap.umap_ as umap
-            warnings.filterwarnings('ignore')
-        except ImportError:
+        # Suppress all warnings for deployment
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            
             try:
-                import umap
-                warnings.filterwarnings('ignore')
+                import hdbscan
             except ImportError:
-                st.error("❌ UMAP not installed")
+                st.error("❌ HDBSCAN not installed properly")
                 return None
+            
+            try:
+                import umap.umap_ as umap
+            except ImportError:
+                try:
+                    import umap
+                except ImportError:
+                    st.error("❌ UMAP not installed properly")
+                    return None
         
-        # Features selection
+        # Features selection with validation
         required_features = ['primary_type_encoded', 'weekday', 'hour', 'crime_scene',
                            'location_category_encoded', 'latitude', 'longitude']
         
         # Validate features
         available_features = [col for col in required_features if col in df.columns]
         if len(available_features) < 7:
-            st.error(f"Missing features: {set(required_features) - set(available_features)}")
+            st.error(f"❌ Missing required features: {set(required_features) - set(available_features)}")
             return None
         
         fitur = df[required_features].copy()
         st.write(f"📊 **Data for clustering**: {len(fitur):,} records")
         
-        # Feature validation
-        st.write("📊 **Feature validation**:")
+        # Enhanced feature validation for deployment
         for col in required_features:
             if col in fitur.columns:
-                nan_count = fitur[col].isnull().sum()
-                dtype = fitur[col].dtype
-                unique_vals = fitur[col].nunique()
-                st.write(f"  {col}: dtype={dtype}, unique={unique_vals}, NaN={nan_count}")
-                
+                # Convert to numeric if needed
                 if fitur[col].dtype == 'object':
-                    fitur[col] = pd.to_numeric(fitur[col], errors='coerce')
-                    st.warning(f"  Converted {col} to numeric")
+                    try:
+                        fitur[col] = pd.to_numeric(fitur[col], errors='coerce')
+                    except Exception as e:
+                        st.error(f"❌ Cannot convert {col} to numeric: {str(e)}")
+                        return None
+                
+                # Handle infinite values
+                if np.isinf(fitur[col]).any():
+                    fitur[col] = fitur[col].replace([np.inf, -np.inf], np.nan)
+                
+                # Fill remaining NaN values
+                if fitur[col].isnull().any():
+                    fitur[col] = fitur[col].fillna(fitur[col].median())
         
-        # Handle NaN values
-        if fitur.isnull().sum().sum() > 0:
-            st.warning("Found NaN values, filling with median")
-            fitur = fitur.fillna(fitur.median())
+        # Standard scaling with error handling
+        try:
+            scaler = StandardScaler()
+            scaled_fitur = scaler.fit_transform(fitur)
+            st.write(f"📊 **Scaled features shape**: {scaled_fitur.shape}")
+        except Exception as e:
+            st.error(f"❌ Scaling error: {str(e)}")
+            return None
         
-        # Standard scaling
-        scaler = StandardScaler()
-        scaled_fitur = scaler.fit_transform(fitur)
-        st.write(f"📊 **Scaled features shape**: {scaled_fitur.shape}")
-        
-        # UMAP dimensionality reduction
+        # UMAP dimensionality reduction with enhanced error handling
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
+                
+                # Adjust n_neighbors based on data size
+                n_neighbors = min(30, max(2, len(fitur) // 10))
+                
                 reducer = umap.UMAP(
-                    n_neighbors=30, 
+                    n_neighbors=n_neighbors, 
                     min_dist=0.1, 
                     n_components=2, 
                     random_state=42,
-                    n_jobs=1
+                    n_jobs=1,
+                    verbose=False
                 )
                 embedding = reducer.fit_transform(scaled_fitur)
                 st.write(f"📊 **UMAP embedding shape**: {embedding.shape}")
+                
         except Exception as e:
             st.error(f"❌ UMAP error: {str(e)}")
+            st.error("This might be due to insufficient data or memory constraints")
             return None
         
-        # HDBSCAN tuning loop
+        # HDBSCAN tuning loop with better error handling
         tuning_results = []
         total_combinations = len(min_cluster_sizes) * len(min_samples_list)
+        
+        if total_combinations > 20:
+            st.warning("⚠️ Large parameter space detected. This may take some time...")
         
         progress_bar = st.progress(0)
         status_text = st.empty()
         current_step = 0
         
-        st.write("🔍 **HDBSCAN Tuning Results:**")
+        st.write("🔍 **HDBSCAN Tuning Progress:**")
         results_placeholder = st.empty()
         
         for min_size in min_cluster_sizes:
@@ -402,14 +427,17 @@ def run_hdbscan_tuning_custom(df, min_cluster_sizes, min_samples_list):
                 status_text.text(f"Testing: min_size={min_size}, min_samples={min_samples} ({current_step}/{total_combinations})")
                 
                 try:
-                    clusterer = hdbscan.HDBSCAN(
-                        min_cluster_size=int(min_size),
-                        min_samples=int(min_samples),
-                        metric='euclidean',
-                        prediction_data=True,
-                        cluster_selection_epsilon=0.0
-                    )
-                    labels = clusterer.fit_predict(embedding)
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        
+                        clusterer = hdbscan.HDBSCAN(
+                            min_cluster_size=int(min_size),
+                            min_samples=int(min_samples),
+                            metric='euclidean',
+                            prediction_data=True,
+                            cluster_selection_epsilon=0.0
+                        )
+                        labels = clusterer.fit_predict(embedding)
                     
                     n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
                     noise = np.sum(labels == -1)
@@ -426,17 +454,25 @@ def run_hdbscan_tuning_custom(df, min_cluster_sizes, min_samples_list):
                         'result_text': result_text
                     })
                     
-                    # Update display
-                    results_text = "\n".join([r['result_text'] for r in tuning_results])
-                    results_placeholder.text(results_text)
+                    # Update display with recent results only (for performance)
+                    recent_results = tuning_results[-5:] if len(tuning_results) > 5 else tuning_results
+                    results_text = "\n".join([r['result_text'] for r in recent_results])
+                    results_placeholder.text(f"Recent results:\n{results_text}")
                     
                 except Exception as e:
-                    st.warning(f"Error with min_size={min_size}, min_samples={min_samples}: {str(e)}")
+                    st.warning(f"⚠️ Error with min_size={min_size}, min_samples={min_samples}: {str(e)}")
+                    continue
                 
+                # Update progress
                 progress_bar.progress(current_step / total_combinations)
         
+        # Cleanup
         progress_bar.empty()
         status_text.empty()
+        
+        if not tuning_results:
+            st.error("❌ No successful tuning results. Please check your data or try different parameters.")
+            return None
         
         # Convert to DataFrame
         tuning_df = pd.DataFrame(tuning_results)
@@ -448,7 +484,7 @@ def run_hdbscan_tuning_custom(df, min_cluster_sizes, min_samples_list):
         st.session_state.reducer = reducer
         st.session_state.scaled_fitur = scaled_fitur
         
-        st.success(f"✅ Tuning completed! Tested {len(tuning_results)} combinations.")
+        st.success(f"✅ Tuning completed! Successfully tested {len(tuning_results)}/{total_combinations} combinations.")
         
         return tuning_df
 
